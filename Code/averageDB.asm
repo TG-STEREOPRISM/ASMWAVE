@@ -27,17 +27,13 @@ extern _free
 
 ;; fix final block averaging system
 
-
 ;; Remove peaking sys
 
 ;; LOCAL LABELS
 
 ;; use ESI
 
-
-
-
-;;;;; THE NUMBERS PICKED UP BY FINAL BLOCK, ArE BRONMKEN
+;; get rid of MakeNotZero, replace with a simple 'or bit 1'
 
 
 section .data
@@ -344,10 +340,6 @@ loadFile: ; Loads file into memory
     ;test
     
     ; READ FILE  
-    ;mov ecx, [fileSize]
-    ;mov edx, [readBuffer+0] ; <<<<<========
-    ;lea ebx, [counter]
-    ;mov eax, [handle]
     push NULL ;overlap
     push counter ;pointer to counter
     push dword [fileSize]
@@ -370,8 +362,6 @@ loadFile: ; Loads file into memory
     
 getInfo: ;Gets samplerate and bit depth, ect
 
-    PRINT_STRING "TESTIN"
-    NEWLINE
     
     mov eax, [readBuffer]
         
@@ -379,8 +369,6 @@ getInfo: ;Gets samplerate and bit depth, ect
     cmp ebx, "WAVE"
     jne notAwav
     
-    ;mov dword edx, [hold_value]  << ???
-    ;push edx
     
     mov word bx, [eax+34]
     cmp bx, 16
@@ -426,11 +414,6 @@ getInfo: ;Gets samplerate and bit depth, ect
         
 mono16:
     
-    ; EAX is the addition
-    ; EBX is buffer count / malloc
-    ; ECX is counting
-    ; EDX is read ??
-    
     PRINT_STRING "started MONO 16"
     NEWLINE
     
@@ -475,14 +458,10 @@ mono16:
     jmp loop16m
     retLoop16m:
     
-    ;PRINT_STRING "Left loop"
-    ;NEWLINE
-    
     push dword 1 ;number of channels
     push dword [final_result]
     push NULL
-    ;PRINT_STRING "attempting post call"
-    ;NEWLINE
+
     jmp postResults
     
     loop16m:
@@ -496,14 +475,6 @@ mono16:
         bt dx, 15
         jc makePos16m
         retMakePos16m:
-        
-        test edx, edx
-        jz makeNotZero16m
-        retMakeNotZero16m:
-        
-        cmp dx, [compare]
-        jg newLarge16m
-        retNewLarge16m:
         
         add eax, edx
         
@@ -522,29 +493,15 @@ mono16:
         retFinalBlock16m:
         
         jmp retLoop16m
-              
-        newLarge16m:
-            mov [compare], dx
-            jmp retNewLarge16m
-            
-        makeNotZero16m:
-            mov edx, 1
-            jmp retMakeNotZero16m
          
         block16m:
             add dword [statusbarC], 1
-            
             
             mov [hold_value4], ecx
             
             sub dword [blockAmt], 1
             
-            PRINT_DEC 4, eax
-            NEWLINE
-            
-            
-            mov dword [blogg], 1
-            
+            or eax, 0x00000001 ;make not zero
             push dword 32767 ;16 bit depth
             push dword BLOCK_SIZE_16
             push eax
@@ -555,26 +512,16 @@ mono16:
             push eax
             call FPUfunc2
             add dword [blockCount], 1
-            ;PRINT_STRING "ret'd from 2"
-            ;NEWLINE
-            
+
             mov eax, 0
-            ;PRINT_STRING "neg # "
-            ;PRINT_DEC 4, [mpc]
-            ;NEWLINE
-            
-            ;PRINT_STRING "Blocks left: "
-            ;PRINT_DEC 4, [blockAmt]
-            ;NEWLINE
             
             mov ebx, [statusbar1]
             cmp [statusbarC], ebx
             je addStatus16m 
             retAddStatus16m:
             
-            
             mov ebx, BLOCK_SIZE_16
-              
+            
             jmp retBlock16m
             
             addStatus16m:
@@ -585,9 +532,9 @@ mono16:
                 mov dword [statusbarC], 0
                 add dword [statusbarT], 1
                 jmp retAddStatus16m
-            
+                
         finalBlock16m:
-            
+               
             inc ecx
             
             mov edx, [readBuffer]
@@ -598,14 +545,6 @@ mono16:
             jc makePos16m2
             retMakePos16m2:
             
-            test edx, edx
-            jz makeNotZero16m2
-            retMakeNotZero16m2:
-            
-            cmp dx, [compare]
-            jg newLarge16m2
-            retNewLarge16m2:
-        
             add eax, edx
             
             dec ebx
@@ -620,7 +559,8 @@ mono16:
                 ;PRINT_STRING "Actual final"
                 ;NEWLINE
                 add dword [blockCount], 1
-            
+                
+                or eax, 0x00000001 ;make not zero
                 push dword 32767 ;16 bit depth
                 push dword [remainderBlock]
                 push eax
@@ -629,7 +569,6 @@ mono16:
                 push dword [addition_heap]
                 push eax
                 call FPUfunc2
-                
                 
                 push dword [addition_heap]
                 call FPUfunc3
@@ -656,13 +595,6 @@ mono16:
     
                 jmp retMakePos16m2
                 
-            newLarge16m2:
-                mov [compare], dx
-                jmp retNewLarge16m2
-                
-            makeNotZero16m2:
-                mov edx, 1
-                jmp retMakeNotZero16m2
 
         makePos16m: 
                
@@ -739,12 +671,6 @@ stereo16:
         retMakePos16s:
         
         
-        
-        test edx, edx
-        jz makeNotZero16s
-        retMakeNotZero16s:
-        
-        
         cmp al, 1
         je setRight16s
         mov al, 1
@@ -753,7 +679,6 @@ stereo16:
         
         dec ebx
         jz block16s
-        
         retBlock16s:
         
         cmp dword [blockAmt], 0
@@ -764,7 +689,7 @@ stereo16:
         mov ecx, [hold_value4]
         mov eax, 0
         mov ebx, [remainderBlock]
-
+        
         jmp finalBlock16s
         retFinalBlock16s:
         
@@ -775,9 +700,6 @@ stereo16:
             mov al, 0
             jmp retSetRight16s
             
-        makeNotZero16s:
-            mov edx, 1
-            jmp retMakeNotZero16s
               
         block16s:
             add dword [statusbarC], 1
@@ -790,7 +712,7 @@ stereo16:
             
             
             ;Left first
-            
+            or dword [channel_L], 0x00000001 ;make not zero
             push dword 32767 ;16 bit depth
             push dword BLOCK_SIZE_16
             push dword [channel_L]
@@ -808,7 +730,7 @@ stereo16:
             mov dword [channel_L], 0
             
             ;now right
-            
+            or dword [channel_R], 0x00000001 ;make not zero
             push dword 32767 ;16 bit depth
             push dword BLOCK_SIZE_16
             push dword [channel_R]
@@ -852,13 +774,6 @@ stereo16:
             jc makePos16s2
             retMakePos16s2:
         
-            test edx, edx
-            jz makeNotZero16s2
-            retMakeNotZero16s2:
-        
-            cmp dx, [compare]
-            jg newLarge16s2
-            retNewLarge16s2:
         
             cmp al, 1
             je setRight16s2
@@ -885,7 +800,7 @@ stereo16:
                 add dword [blockCount], 1
                 
                 ;left
-                
+                or dword [channel_L], 0x00000001 ;make not zero
                 push dword 32767 ;16 bit depth
                 push dword [remainderBlock]
                 push dword [channel_L]
@@ -902,6 +817,7 @@ stereo16:
                 
                 ;right
                 
+                or dword [channel_R], 0x00000001 ;make not zero
                 push dword 32767 ;16 bit depth
                 push dword [remainderBlock]
                 push dword [channel_R]
@@ -938,13 +854,6 @@ stereo16:
                 add dword [mpc], 1
                 jmp retMakePos16s2
                 
-            newLarge16s2:
-                mov [compare], dx
-                jmp retNewLarge16s2
-                
-            makeNotZero16s2:
-                mov edx, 1
-                jmp retMakeNotZero16s2
 
         makePos16s: 
             neg dx
@@ -1013,9 +922,6 @@ mono24:
         jc makePos24m
         retMakePos24m:
         
-        test edx, edx
-        jz makeNotZero24m
-        retMakeNotZero24m:
 
         add eax, edx
         
@@ -1033,11 +939,7 @@ mono24:
         retFinalBlock24m:
         
         jmp retLoop24m
-               
-        makeNotZero24m:
-            mov edx, 1
-            jmp retMakeNotZero24m
-        
+
                  
         block24m:
             
@@ -1047,6 +949,7 @@ mono24:
             
             sub dword [blockAmt], 1
             
+            or eax, 0x00000001 ;make not zero
             push dword 8388607 ;24 bit depth
             push dword BLOCK_SIZE_24
             push eax
@@ -1090,9 +993,6 @@ mono24:
             jc makePos24m2
             retMakePos24m2:
             
-            test edx, edx
-            jz makeNotZero24m2
-            retMakeNotZero24m2:
             
             add eax, edx
             
@@ -1111,14 +1011,13 @@ mono24:
                 NEWLINE
                 
                 add dword [blockCount], 1
-            
+                
+                or eax, 0x00000001 ;make not zero
                 push dword 8388607 ;24 bit depth
                 push dword [remainderBlock]
                 push eax
                 call FPUfunc1
-                
-                
-                
+             
                 push dword [addition_heap]
                 push dword [log_result]
                 call FPUfunc2
@@ -1152,9 +1051,7 @@ mono24:
                 
                 jmp retMakePos24m2
                 
-            makeNotZero24m2:
-                mov edx, 1
-                jmp retMakeNotZero24m2
+
 
         makePos24m:
             not edx
@@ -1226,14 +1123,11 @@ stereo24:
         mov edx, [readBuffer]
         mov edx, [edx+ecx]
         and edx, CUT_TOP_8
-
+        
         bt edx, 23
         jc makePos24s
         retMakePos24s:
         
-        test edx, edx
-        jz makeNotZero24s
-        retMakeNotZero24s:
         
         cmp al, 1
         je setRight24s
@@ -1270,9 +1164,6 @@ stereo24:
             mov al, 0
             jmp retSetRight24s
             
-        makeNotZero24s:
-            mov edx, 1
-            jmp retMakeNotZero24s
               
         block24s:
             
@@ -1286,7 +1177,7 @@ stereo24:
             
             
             ;Left first
-            
+            or dword [channel_L], 0x00000001 ;make not zero
             push dword 8388607 ;24 bit depth
             push dword BLOCK_SIZE_24
             push dword [channel_L]
@@ -1304,7 +1195,7 @@ stereo24:
             mov dword [channel_L], 0
             
             ;now right
-            
+            or dword [channel_R], 0x00000001 ;make not zero
             push dword 8388607 ;24 bit depth
             push dword BLOCK_SIZE_24
             push dword [channel_R]
@@ -1349,9 +1240,7 @@ stereo24:
             jc makePos24s2
             retMakePos24s2:
             
-            test edx, edx
-            jz makeNotZero24s2
-            retMakeNotZero24s2:
+            or edx, 0x00000001 ;make not zero
             
             cmp al, 1
             je setRight24s2
@@ -1380,6 +1269,9 @@ stereo24:
                 
                 ;left
                 
+                or dword [remainderBlock], 0x00000001 ;ensure that it is not 0
+                
+                or dword [channel_L], 0x00000001 ;final check
                 push dword 8388607 ;24 bit depth
                 push dword [remainderBlock]
                 push dword [channel_L]
@@ -1395,6 +1287,8 @@ stereo24:
                 mov [final_L], eax
                 
                 ;right
+                
+                or dword [channel_R], 0x00000001 ;final check
                 
                 push dword 8388607 ;24 bit depth
                 push dword [remainderBlock]
@@ -1435,11 +1329,6 @@ stereo24:
                 jmp retMakePos24s2
                 
                 
-            makeNotZero24s2:
-                mov edx, 1
-                PRINT_STRING 'mnz'
-                NEWLINE
-                jmp retMakeNotZero24s2
 
         makePos24s: 
             not edx
