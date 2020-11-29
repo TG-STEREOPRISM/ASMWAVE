@@ -32,7 +32,7 @@ extern _free
 
 ;; use ESI
 
-;; get rid of MakeNotZero, replace with a simple 'or bit 1'
+;; Swap blockAmt and blockCount
 
 
 section .data
@@ -453,7 +453,7 @@ mono16:
     div ecx
     
     mov [blockAmt], eax
-    
+    mov [blockCount], eax
     PRINT_STRING "# of blocks: "
     PRINT_DEC 4, eax
     NEWLINE
@@ -480,7 +480,7 @@ mono16:
     push dword 1 ;number of channels
     push dword [final_result]
     push NULL
-
+    
     jmp postResults
     
     loop16m:
@@ -508,12 +508,20 @@ mono16:
         mov ecx, [hold_value4]
         mov eax, 0
         mov ebx, [remainderBlock]
+        PRINT_DEC 4, [remainderBlock]
+        PRINT_STRING ' rem'
+        NEWLINE
+        
         jmp finalBlock16m
         retFinalBlock16m:
         
         jmp retLoop16m
-         
+        
         block16m:
+            PRINT_STRING 'ecx: '
+            PRINT_DEC 4, ecx
+            NEWLINE
+            
             add dword [statusbarC], 1
             
             mov [hold_value4], ecx
@@ -530,8 +538,7 @@ mono16:
             push dword [addition_heap]
             push eax
             call FPUfunc2
-            add dword [blockCount], 1
-
+            
             mov eax, 0
             
             mov ebx, [statusbar1]
@@ -564,29 +571,28 @@ mono16:
             jc makePos16m2
             retMakePos16m2:
             
+            
             add eax, edx
             
             dec ebx
-            jnz finalBlock16m
-            jz actualFinalBlock16m
+            cmp ebx, 0
+            jg finalBlock16m
+            jmp actualFinalBlock16m
             
             retActualFinalBlock16m:
             
             jmp retFinalBlock16m
             
             actualFinalBlock16m:
-                add dword [blockCount], 1
-                
+
                 or eax, 0x00000001 ;make not zero
                 push dword 32767 ;16 bit depth
                 push dword [remainderBlock]
                 push eax
                 call FPUfunc1
                 
-                push dword [addition_heap]
+                push dword BLOCK_SIZE_16
                 push eax
-                call FPUfunc2
-                
                 push dword [addition_heap]
                 call FPUfunc3
                 
@@ -646,6 +652,7 @@ stereo16:
     div ecx
     
     mov [blockAmt], eax
+    mov [blockCount], eax
     
     PRINT_DEC 4, eax
     NEWLINE
@@ -705,7 +712,7 @@ stereo16:
         mov ecx, [hold_value4]
         mov eax, 0
         mov ebx, [remainderBlock]
-        
+        shl ebx, 1
         jmp finalBlock16s
         retFinalBlock16s:
         
@@ -719,13 +726,15 @@ stereo16:
             
               
         block16s:
+            PRINT_STRING 'ecx: '
+            PRINT_DEC 4, ecx
+            NEWLINE
             add dword [statusbarC], 1
 
             mov [hold_value4], ecx
             
             sub dword [blockAmt], 1
             
-            add dword [blockCount], 1
             
             
             ;Left first
@@ -735,7 +744,6 @@ stereo16:
             push dword [channel_L]
             call FPUfunc1
             
-            ;PRINT_STRING "L tbadd "
             
             push dword [heap_L]
             push eax
@@ -781,6 +789,7 @@ stereo16:
                 jmp retAddStatus16s
                 
         finalBlock16s:
+            
             inc ecx
         
             mov edx, [readBuffer]
@@ -790,10 +799,12 @@ stereo16:
             bt dx, 15
             jc makePos16s2
             retMakePos16s2:
-        
+            
             cmp al, 1
             je setRight16s2
             mov al, 1
+            
+            
             add dword [channel_L], edx
             retSetRight16s2:
             
@@ -811,8 +822,9 @@ stereo16:
                 jmp retSetRight16s2
                 
             actualFinalBlock16s:
-                add dword [blockCount], 1
-                
+                PRINT_STRING 'ecx: '
+                PRINT_DEC 4, ecx
+                NEWLINE
                 ;left
                 or dword [channel_L], 0x00000001 ;make not zero
                 push dword 32767 ;16 bit depth
@@ -820,28 +832,23 @@ stereo16:
                 push dword [channel_L]
                 call FPUfunc1
                 
+                push dword BLOCK_SIZE_16
+                push eax
                 push dword [heap_L]
-                push eax
-                call FPUfunc2
-                
-                push eax
                 call FPUfunc3
-                
+               
                 mov [final_L], eax
                 
                 ;right
-                
                 or dword [channel_R], 0x00000001 ;make not zero
                 push dword 32767 ;16 bit depth
                 push dword [remainderBlock]
                 push dword [channel_R]
                 call FPUfunc1
                 
+                push dword BLOCK_SIZE_16
+                push eax
                 push dword [heap_R]
-                push eax
-                call FPUfunc2
-                
-                push eax
                 call FPUfunc3
                 
                 mov [final_R], eax
@@ -865,10 +872,8 @@ stereo16:
                 
             makePos16s2: 
                 neg dx
-                add dword [mpc], 1
                 jmp retMakePos16s2
                 
-
         makePos16s: 
             neg dx
             jmp retMakePos16s
@@ -892,6 +897,7 @@ mono24:
     div ecx
     
     mov [blockAmt], eax
+    mov [blockCount], eax
     mov [remainderBlock], edx
     
     PRINT_DEC 4, [blockAmt]
@@ -969,11 +975,11 @@ mono24:
             push eax
             call FPUfunc1
             
+            
             ; store block
             push dword [addition_heap]
             push eax
             call FPUfunc2
-            add dword [blockCount], 1
 
             mov eax, 0
             
@@ -1018,23 +1024,18 @@ mono24:
             jmp retFinalBlock24m
             
             actualFinalBlock24m:
-                PRINT_STRING "Actual final"
-                NEWLINE
-                PRINT_DEC 4, eax
-                NEWLINE
-                
-                add dword [blockCount], 1
-                
+            
                 or eax, 0x00000001 ;make not zero
                 push dword 8388607 ;24 bit depth
                 push dword [remainderBlock]
                 push eax
                 call FPUfunc1
                 
-                push dword [addition_heap]
-                push dword [log_result]
-                call FPUfunc2
+                PRINT_HEX 4, eax
+                NEWLINE
                 
+                push dword BLOCK_SIZE_24
+                push eax
                 push dword [addition_heap]
                 call FPUfunc3
                 
@@ -1067,7 +1068,6 @@ mono24:
             inc edx
             and edx, CUT_TOP_8
             
-            add dword [mpc], 1
             jmp retMakePos24m
 
 stereo24:
@@ -1096,6 +1096,7 @@ stereo24:
     div ecx
     
     mov [blockAmt], eax
+    mov [blockCount], eax
     
     PRINT_DEC 4, eax
     NEWLINE
@@ -1157,7 +1158,7 @@ stereo24:
         mov ecx, [hold_value4]
         mov eax, 0
         mov ebx, [remainderBlock]
-        
+        shl ebx, 1
         jmp finalBlock24s
         retFinalBlock24s:
         
@@ -1176,8 +1177,7 @@ stereo24:
             mov [hold_value4], ecx
             
             sub dword [blockAmt], 1
-            
-            add dword [blockCount], 1
+           
             
             
             ;Left first
@@ -1197,7 +1197,7 @@ stereo24:
             
             
             mov dword [channel_L], 0
-            
+                        
             ;now right
             or dword [channel_R], 0x00000001 ;make not zero
             push dword 8388607 ;24 bit depth
@@ -1267,8 +1267,8 @@ stereo24:
                 
             actualFinalBlock24s:
                 
-                add dword [blockCount], 1
-                
+                PRINT_DEC 4, [channel_L]
+                NEWLINE
                 ;left
                 
                 or dword [remainderBlock], 0x00000001 ;ensure that it is not 0
@@ -1285,6 +1285,7 @@ stereo24:
                 
                 push eax
                 call FPUfunc3
+                
                 
                 mov [final_L], eax
                 
@@ -1329,9 +1330,7 @@ stereo24:
                 and edx, CUT_TOP_8
 
                 jmp retMakePos24s2
-                
-                
-
+        
         makePos24s: 
             not edx
             inc edx
@@ -1415,13 +1414,13 @@ yesORno:
         ret
         
 postResults:
-   
+    
     pop dword [print2]
     pop dword [print]
     pop ebx
     
     push dword [readBuffer]
-    call _free
+    call _free ;begone, o' accursed memory
     
     NEWLINE
     PRINT_STRING "========================================"
@@ -1445,7 +1444,6 @@ postResults:
     call _printf
     add esp, 12
     
-    
     GET_DEC 1, al
     
     push NULL
@@ -1462,9 +1460,6 @@ postResults:
         push formatM
         call _printf
         add esp, 12
-        
-        
-        
         
         PRINT_STRING "largest num: "
         PRINT_DEC 4, [compare]
@@ -1485,9 +1480,13 @@ FPUfunc1:
     pop dword [block_size] ;# of block elements to be averaged
     pop dword [depth]
     
+;    PRINT_DEC 4, [uab]
+;    NEWLINE
+;    PRINT_DEC 4, [block_size]
+;    NEWLINE
+    
     ;Logarithm using x87 set
     finit 
-    
     
     ;avg ssample height
     fild dword [uab] ;/
@@ -1495,7 +1494,6 @@ FPUfunc1:
     fdiv 
     
     fstp dword [ab]
-    
     
     ;Float divide 
     fild dword [depth]
@@ -1521,6 +1519,9 @@ FPUfunc1:
     
     fstp dword [log_result]
     
+;    PRINT_HEX 4, [log_result]
+;    NEWLINE
+    
     mov eax, [log_result] ;return value
     
 
@@ -1533,7 +1534,6 @@ FPUfunc2:
     ; Addition
     pop dword [to_be_added]
     pop dword [addition_heap]
-    
     
     finit
     
@@ -1554,16 +1554,41 @@ FPUfunc3:
     
     pop dword [preAvg]
     
+    
+    pop dword [preAvg2] ;last block
+    
+    pop dword [depth]
+    
     ; Average whole
     finit
     
-    fld dword [preAvg] ;/
+    ;weighted average ( (x*y + a*b) / (x + a) )
+    fld dword [preAvg]
+    fild dword [depth]
     fild dword [blockCount]
-    fdiv 
+    fmul
+    fmul
+    fild dword [remainderBlock]
+    fld dword [preAvg2]
+    fmul
+    fadd
+    fstp dword [numerator]
+    
+    fild dword [blockCount]
+    fild dword [depth]
+    fmul
+    fild dword [remainderBlock]
+    fadd
+    fstp dword [denominator]
+    
+    fld dword [numerator] ;/
+    fld dword [denominator]
+    fdiv
     
     fstp dword [final_result]
     
-    mov eax, [final_result] ;for 2 channel ops
+    mov eax, [final_result]
+    
     
     push dword [hold_value]
     ret
@@ -1615,9 +1640,7 @@ DFT_16:
     mov dword [iter], 0
     mov dword [N], 200
     mov dword [LU], 0
-    
 
-    
     mov ebx, [readBuffer]
     mov edx, 0
     mov eax, [ebx+40]
