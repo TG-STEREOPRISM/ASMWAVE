@@ -32,8 +32,11 @@ extern _free
 
 ;; use ESI
 
-;; Swap blockAmt and blockCount
+;; Swap 'blockAmt' and 'blockCount'     
 
+;;make not zero during final average - for blockamt
+
+;;;; CRASHES ON HIGHBANDTEST.wav
 
 section .data
     %define OPEN_EXISTING 3
@@ -47,7 +50,7 @@ section .data
     %define BLOCK_SIZE_24 250
     %define CUT_TOP_8 0x00FFFFFF
     %define DFT_SIZE 4096 * 4
-        
+       
     hold_value dd 0
     hold_value2 dd 0
     hold_value3 dd 0
@@ -72,6 +75,7 @@ section .data
     TWENTY dd 20.0
     POINT_FOUR dd 0.4
     HUNDRED dd 100.0
+    FIVE dd 5.0
     formatM db "%.1f dB-FS", 10, 0
     formatS db "%.1f", 0
     formatL db "L %.1f dB-FS", 10, 0
@@ -169,6 +173,10 @@ section .data
     LU dd 0
     offset dd 0
     sampleAmt dd 0
+    greatest dd 0
+    painAndSuffering dd 0
+    band_label db 'L', 'M', 'H', 0
+
     
 ; DEFINE STRUCTURE    
 struc OPENFILENAMEA
@@ -267,12 +275,10 @@ _main:
     NEWLINE
     
     ret
+    
 getFilePath:
-    
-    
     pop edx
     mov [hold_value], edx ;saves the pointer thingy
-    
     
     PRINT_STRING "Attempting to show Open File menu"
     NEWLINE
@@ -312,13 +318,10 @@ getFilePath:
     call _CreateFileA@28
     mov dword [handle], eax
     
-    PRINT_STRING "error check is... "
     ;error check
     
     cmp eax, 0
-    jle ErrChk
-    PRINT_STRING "none."
-    NEWLINE
+    jle fileNotFound
     
     mov eax, [libHandle]
     push eax
@@ -330,6 +333,7 @@ getFilePath:
     ret
     
 loadFile: ; Loads file into memory
+
     
     
     pop edx
@@ -344,9 +348,7 @@ loadFile: ; Loads file into memory
     PRINT_STRING " bytes"
     NEWLINE
     mov [fileSize], eax
-    
-    ;cmp eax, MAX_SIZE
-    ;jge fileTooBig
+     
     
     ; ALLOCATE
     add dword [fileSize], 16 ;a bit of padding :)
@@ -388,7 +390,6 @@ getInfo: ;Gets samplerate and bit depth, ect
     cmp ebx, "WAVE"
     jne notAwav
     
-    
     mov word bx, [eax+34]
     cmp bx, 16
     je is16
@@ -396,7 +397,6 @@ getInfo: ;Gets samplerate and bit depth, ect
     je is24
     
     call notAwav
-    
     
     notAwav:
         PRINT_STRING "ERROR: The file you selected is not a true .WAV file, or the bit depth is not supported."
@@ -445,7 +445,6 @@ mono16:
     PRINT_DEC 4, eax
     PRINT_STRING " sample sets"
     NEWLINE
-    
     
     mov edx, 0
     ;eax already good
@@ -515,12 +514,10 @@ mono16:
         jmp finalBlock16m
         retFinalBlock16m:
         
+        call DFT_16
         jmp retLoop16m
         
         block16m:
-            PRINT_STRING 'ecx: '
-            PRINT_DEC 4, ecx
-            NEWLINE
             
             add dword [statusbarC], 1
             
@@ -584,7 +581,7 @@ mono16:
             jmp retFinalBlock16m
             
             actualFinalBlock16m:
-
+                or dword [remainderBlock], 0x00000001
                 or eax, 0x00000001 ;make not zero
                 push dword 32767 ;16 bit depth
                 push dword [remainderBlock]
@@ -822,10 +819,8 @@ stereo16:
                 jmp retSetRight16s2
                 
             actualFinalBlock16s:
-                PRINT_STRING 'ecx: '
-                PRINT_DEC 4, ecx
-                NEWLINE
                 ;left
+                or dword [remainderBlock], 0x00000001
                 or dword [channel_L], 0x00000001 ;make not zero
                 push dword 32767 ;16 bit depth
                 push dword [remainderBlock]
@@ -836,7 +831,7 @@ stereo16:
                 push eax
                 push dword [heap_L]
                 call FPUfunc3
-               
+                
                 mov [final_L], eax
                 
                 ;right
@@ -942,7 +937,6 @@ mono24:
         jc makePos24m
         retMakePos24m:
         
-
         add eax, edx
         
         dec ebx
@@ -955,6 +949,7 @@ mono24:
         mov ecx, [hold_value4]
         mov eax, 0
         mov ebx, [remainderBlock]
+        shl ebx, 1
         jmp finalBlock24m
         retFinalBlock24m:
         
@@ -1024,15 +1019,19 @@ mono24:
             jmp retFinalBlock24m
             
             actualFinalBlock24m:
-            
+                
+                PRINT_DEC 4, eax
+                NEWLINE
+                
+                or dword [remainderBlock], 0x00000001
                 or eax, 0x00000001 ;make not zero
                 push dword 8388607 ;24 bit depth
                 push dword [remainderBlock]
                 push eax
                 call FPUfunc1
                 
-                PRINT_HEX 4, eax
-                NEWLINE
+                ;PRINT_HEX 4, eax
+                ;NEWLINE
                 
                 push dword BLOCK_SIZE_24
                 push eax
@@ -1171,7 +1170,6 @@ stereo24:
             
               
         block24s:
-            
             add dword [statusbarC], 1
             
             mov [hold_value4], ecx
@@ -1266,46 +1264,35 @@ stereo24:
                 jmp retSetRight24s2
                 
             actualFinalBlock24s:
-                
-                PRINT_DEC 4, [channel_L]
-                NEWLINE
-                ;left
-                
-                or dword [remainderBlock], 0x00000001 ;ensure that it is not 0
-                
-                or dword [channel_L], 0x00000001 ;final check
+            
+                or dword [remainderBlock], 0x00000001
+                or dword [channel_L], 0x00000001 ;make not zero
                 push dword 8388607 ;24 bit depth
                 push dword [remainderBlock]
                 push dword [channel_L]
                 call FPUfunc1
                 
+                push dword BLOCK_SIZE_24
+                push eax
                 push dword [heap_L]
-                push eax
-                call FPUfunc2
-                
-                push eax
                 call FPUfunc3
-                
                 
                 mov [final_L], eax
                 
                 ;right
-                
-                or dword [channel_R], 0x00000001 ;final check
-                
+                or dword [channel_R], 0x00000001 ;make not zero
                 push dword 8388607 ;24 bit depth
                 push dword [remainderBlock]
                 push dword [channel_R]
                 call FPUfunc1
                 
+                push dword BLOCK_SIZE_24
+                push eax
                 push dword [heap_R]
-                push eax
-                call FPUfunc2
-                
-                push eax
                 call FPUfunc3
                 
                 mov [final_R], eax
+                
                 
                 call finishStatusBar24s
                 
@@ -1337,41 +1324,27 @@ stereo24:
             and edx, CUT_TOP_8
             jmp retMakePos24s
     
-ErrChk:
-    call _GetLastError@0
-    PRINT_DEC 4, eax
-    NEWLINE
-    cmp eax, 3
-    je fileNotFound
-    cmp eax, 2
-    je fileNotFound
-    cmp eax, 123
-    je fileNotFound
-    
-    PRINT_STRING "An unknown error occured, would you like to try again? (y/N) "
-    
-    call yesORno
-    cmp al, 1
-    je getFilePath
-    
-    push  NULL
-    call  _ExitProcess@4
     
 fileNotFound: ;error message
 
-    PRINT_STRING "ERROR: File not found, or invalid path"
+    PRINT_STRING "ERROR: File not found, or invalid path."
     NEWLINE
     
-    GET_DEC 1, al
+    PRINT_STRING 'Goodbye...'
     
-    push  NULL
-    call  _ExitProcess@4
-    
-
-    
+    ;wait for a sec
+    mov ecx, 1700000000
+    mov eax, 1
+    .lopp:
+        mul ecx
+        dec ecx
+        jnz .lopp
+        
+    push NULL 
+    call _ExitProcess@4
+      
 loadLibraries:
-    pop edx
-    mov [hold_value], edx ;saves the pointer thingy
+    pop dword [stamk]
     
     lea eax, [libName]
     push eax
@@ -1385,34 +1358,10 @@ loadLibraries:
     call _GetProcAddress@8
     mov dword [GetOpenFileNameA], eax
     
-    mov dword edx, [hold_value]
-    push edx
+    push dword [stamk]
     
     ret
-    
-yesORno:
-    mov al, 0
-    GET_CHAR ah
-    cmp ah, 'y'
-    je yes
-    cmp ah, 'Y'
-    je yes
-    cmp ah, 'n'
-    je no
-    cmp ah, 'N'
-    je no
-   
-    ret
-    
-    yes:
-        PRINT_STRING 'Trying again!'
-        NEWLINE
-        mov al, 1
-        ret
-    no:
-        mov al, 0
-        ret
-        
+           
 postResults:
     
     pop dword [print2]
@@ -1444,6 +1393,8 @@ postResults:
     call _printf
     add esp, 12
     
+    call Print_FT
+    
     GET_DEC 1, al
     
     push NULL
@@ -1461,12 +1412,7 @@ postResults:
         call _printf
         add esp, 12
         
-        PRINT_STRING "largest num: "
-        PRINT_DEC 4, [compare]
-        NEWLINE
-        PRINT_STRING "Neg# "
-        PRINT_DEC 4, [mpc]
-        NEWLINE
+        call Print_FT
         
         GET_DEC 1, al
         
@@ -1546,6 +1492,7 @@ FPUfunc2:
     
     mov eax, [addition_heap]
     
+    
     push dword [hold_value6]
     ret
     
@@ -1553,7 +1500,6 @@ FPUfunc3:
     pop dword [hold_value]
     
     pop dword [preAvg]
-    
     
     pop dword [preAvg2] ;last block
     
@@ -1640,14 +1586,15 @@ DFT_16:
     mov dword [iter], 0
     mov dword [N], 200
     mov dword [LU], 0
-
+    
     mov ebx, [readBuffer]
     mov edx, 0
     mov eax, [ebx+40]
+    
     mov ecx, 2 ;16bit
     div ecx 
     mov edx, 0
-    div dword [ebx+22] ;eax has # of samples
+    div word [ebx+22] ;eax has # of samples
     
     mov edx, 0
     mov ecx, DFT_SIZE
@@ -1655,6 +1602,7 @@ DFT_16:
     
     mov [blockAmt], eax
     mov [remainderBlock], edx
+   
     
     mov eax, [readBuffer]
     add eax, 44
@@ -1695,7 +1643,7 @@ DFT_16:
                 fstp dword [hold_calc]
                 
                 sub ecx, (DFT_SIZE * 200) + 2
-            
+                
                 fld dword [Im]
                 fld dword [hold_calc]
                 fsub
@@ -1739,6 +1687,7 @@ DFT_16:
                 fld dword [dftResult+ecx*4]
                 fadd
                 fstp dword [dftResult+ecx*4]
+               
                 
                 inc ecx
                 cmp ecx, 200 / 2
@@ -1815,11 +1764,82 @@ DFT_16:
         ret
 
 DFT_24:
+
+Print_FT:
+    pop dword [stamk]
+    PRINT_STRING "Frequency Bands:"
+    NEWLINE
+    
+    PRINT_DEC 4, [lowBand]
+    NEWLINE
+    PRINT_DEC 4, [midBand]
+    NEWLINE
+    PRINT_DEC 4, [highBand]
+    NEWLINE
+    
+    mov eax, [lowBand]
+    mov dword [painAndSuffering+0*4], eax
+    mov eax, [midBand]
+    mov dword [painAndSuffering+1*4], eax
+    mov eax, [highBand]
+    mov dword [painAndSuffering+2*4], eax
+    
+    mov ecx, 2 ;# of bands -1
+    mov eax, 0
+    .lop:
+        cmp dword [painAndSuffering+ecx*4], eax
+        jg .greater
+        .ret:
+        dec ecx
+        cmp ecx, 0
+        jge .lop
+        jmp .retLop
+        .greater:
+            mov eax, [painAndSuffering+ecx*4]
+            jmp .ret
+    .retLop:
+    
+    mov [greatest], eax
+    mov ecx, 0
+    PRINT_STRING "chopped:"
+    NEWLINE
+    .lop2:
+        fild dword [painAndSuffering+ecx*4] ;/
+        fild dword [greatest]
+        fdiv
+        fld dword [HUNDRED]
+        fmul ;/
+        fld dword [FIVE]
+        fdiv
+        fistp dword [calc]
+        
+        PRINT_STRING [band_label]
+        NEWLINE
+        PRINT_CHAR [band_label+ecx]
+        PRINT_STRING " "
+        mov ebx, [calc]
+        .lop3:
+            PRINT_STRING "|"
+            dec ebx
+            cmp ebx, 0
+            jg .lop3
+            NEWLINE
+            
+        inc ecx
+        cmp ecx, 3
+        jl .lop2
+        
+              
+    push dword [stamk]
+    ret
+    
+    
     
    
     
     
-    
+
+       
     
     
     
