@@ -22,22 +22,21 @@ extern _free
 ; 5. Create Commented copy
 ; 6. Develop Linux ver.
 
-;; MAKE 24 BIT MORE EFFICIENT WITH JUST A MOV AND AN AND
-
-;; fix final block averaging system
-
-;; Remove peaking sys
-
-;; LOCAL LABELS
-
 ;; use ESI
 
-;; Swap 'blockAmt' and 'blockCount'     
+;; Swap 'blockAmt' and 'blockCount'
 
-;;make not zero during final average - for blockamt
-
-;;;; CRASHES ON HIGHBANDTEST.wav
-
+     ;;current issues:
+        
+        ;large files not doing DFT properly. Negativve number after |||| ? see VoyDyn16s.  
+            ;first block somehow messes stuff up / decides everything
+                ;SUB band is the only one that isn't 'stuck' in place...
+            
+            ;also MAKE SURE STEREO dft WORKS - THEORETICALLY
+            
+            
+            
+            
 section .data
     %define OPEN_EXISTING 3
     %define NULL 0
@@ -46,7 +45,7 @@ section .data
     %define INPUT_SIZE 64
     %define CONSOLE_TEXTMODE 1
     %define MAX_SIZE 104857600
-    %define BLOCK_SIZE_16 41000
+    %define BLOCK_SIZE_16 44100
     %define BLOCK_SIZE_24 250
     %define CUT_TOP_8 0x00FFFFFF
     %define DFT_SIZE 4096 * 4
@@ -82,7 +81,7 @@ section .data
     formatR db "R %.1f dB-FS", 10, 0
     BASE dd 10.0
     temp dd 0
-    bruh dd 0
+    bruh dq 0
     
     readBuffer dd 0
     
@@ -123,8 +122,8 @@ section .data
     ssL dd 0
     ssR dd 0
     stereo dd 0
-    numerator dd 0
-    denominator dd 0
+    numerator dq 0
+    denominator dq 0
     separation_heap dd 0
     stereo_separation dd 0
     louder dd 0
@@ -154,19 +153,23 @@ section .data
     iter dd 0
     k dd 0
     TWO_TIMES_PI dd 6.28318531
-    realResult TIMES 202 dd 0.0
-    imagiResult TIMES 202 dd 0.0
+    realResult TIMES 256 dd 0.0
+    imagiResult TIMES 256 dd 0.0
     hold_calc dd 0
     format db "%.1f", 10, 0
     Re dd 0
     Im dd 0
     calc dd 0
-    TEN dd 10
+    TEN dd 10.0
     finalDFT TIMES 8 dd 0
-    lowBand dd 0
+    
+    subBand dd 0
+    bassBand dd 0
     midBand dd 0
     highBand dd 0
-    dftResult TIMES 202 dd 0
+    vhBand dd 0
+    
+    dftResult TIMES 256 dd 0
     lookUp1 dd 0.0, 0.031416, 0.062832, 0.094248, 0.125664, 0.15708, 0.188496, 0.219911, 0.251327, 0.282743, 0.314159, 0.345575, 0.376991, 0.408407, 0.439823, 0.471239, 0.502655, 0.534071, 0.565487, 0.596903, 0.628319, 0.659734, 0.69115, 0.722566, 0.753982, 0.785398, 0.816814, 0.84823, 0.879646, 0.911062, 0.942478, 0.973894, 1.00531, 1.036726, 1.068142, 1.099557, 1.130973, 1.162389, 1.193805, 1.225221, 1.256637, 1.288053, 1.319469, 1.350885, 1.382301, 1.413717, 1.445133, 1.476549, 1.507964, 1.53938, 1.570796, 1.602212, 1.633628, 1.665044, 1.69646, 1.727876, 1.759292, 1.790708, 1.822124, 1.85354, 1.884956, 1.916372, 1.947787, 1.979203, 2.010619, 2.042035, 2.073451, 2.104867, 2.136283, 2.167699, 2.199115, 2.230531, 2.261947, 2.293363, 2.324779, 2.356194, 2.38761, 2.419026, 2.450442, 2.481858, 2.513274, 2.54469, 2.576106, 2.607522, 2.638938, 2.670354, 2.70177, 2.733186, 2.764602, 2.796017, 2.827433, 2.858849, 2.890265, 2.921681, 2.953097, 2.984513, 3.015929, 3.047345, 3.078761, 3.110177, 3.141593, 3.173009, 3.204425, 3.23584, 3.267256, 3.298672, 3.330088, 3.361504, 3.39292, 3.424336, 3.455752, 3.487168, 3.518584, 3.55, 3.581416, 3.612832, 3.644247, 3.675663, 3.707079, 3.738495, 3.769911, 3.801327, 3.832743, 3.864159, 3.895575, 3.926991, 3.958407, 3.989823, 4.021239, 4.052655, 4.08407, 4.115486, 4.146902, 4.178318, 4.209734, 4.24115, 4.272566, 4.303982, 4.335398, 4.366814, 4.39823, 4.429646, 4.461062, 4.492477, 4.523893, 4.555309, 4.586725, 4.618141, 4.649557, 4.680973, 4.712389, 4.743805, 4.775221, 4.806637, 4.838053, 4.869469, 4.900885, 4.9323, 4.963716, 4.995132, 5.026548, 5.057964, 5.08938, 5.120796, 5.152212, 5.183628, 5.215044, 5.24646, 5.277876, 5.309292, 5.340708, 5.372123, 5.403539, 5.434955, 5.466371, 5.497787, 5.529203, 5.560619, 5.592035, 5.623451, 5.654867, 5.686283, 5.717699, 5.749115, 5.78053, 5.811946, 5.843362, 5.874778, 5.906194, 5.93761, 5.969026, 6.000442, 6.031858, 6.063274, 6.09469, 6.126106, 6.157522, 6.188938, 6.220353, 6.251769
     lookUpPtr dd 0
     sample dd 0
@@ -174,8 +177,7 @@ section .data
     offset dd 0
     sampleAmt dd 0
     greatest dd 0
-    painAndSuffering dd 0
-    band_label db 'L', 'M', 'H', 0
+    band_label db 'SU', 0, 'BA', 0, 'MI', 0, 'HI', 0, 'VH', 0
 
     
 ; DEFINE STRUCTURE    
@@ -239,11 +241,11 @@ fileStruct istruc OPENFILENAMEA
         at OPENFILENAMEA.FlagsEx, dd NULL
     
     iend  
-    
-            
+              
 section .bss
     ;readBuffer2 resb MAX_SIZE
     ;blockBuffer resb MAX_SIZE / 2
+    painAndSuffering resd 6
 
     
     ;for getInfo
@@ -334,8 +336,6 @@ getFilePath:
     
 loadFile: ; Loads file into memory
 
-    
-    
     pop edx
     mov [hold_value], edx ;saves the pointer thingy
     
@@ -503,7 +503,6 @@ mono16:
         cmp dword [blockAmt], 0
         jg loop16m
         
-        
         mov ecx, [hold_value4]
         mov eax, 0
         mov ebx, [remainderBlock]
@@ -581,6 +580,9 @@ mono16:
             jmp retFinalBlock16m
             
             actualFinalBlock16m:
+            
+                PRINT_STRING ' yo '
+                
                 or dword [remainderBlock], 0x00000001
                 or eax, 0x00000001 ;make not zero
                 push dword 32767 ;16 bit depth
@@ -713,6 +715,9 @@ stereo16:
         jmp finalBlock16s
         retFinalBlock16s:
         
+        PRINT_DEC 4, [final_L]
+        NEWLINE
+        
         call DFT_16
         jmp retLoop16s
         
@@ -723,9 +728,7 @@ stereo16:
             
               
         block16s:
-            PRINT_STRING 'ecx: '
-            PRINT_DEC 4, ecx
-            NEWLINE
+
             add dword [statusbarC], 1
 
             mov [hold_value4], ecx
@@ -996,7 +999,7 @@ mono24:
                 mov dword [statusbarC], 0
                 add dword [statusbarT], 1
                 jmp retAddStatus24m
-            
+                
         finalBlock24m:
             add ecx, 3
             
@@ -1265,6 +1268,7 @@ stereo24:
                 
             actualFinalBlock24s:
             
+            
                 or dword [remainderBlock], 0x00000001
                 or dword [channel_L], 0x00000001 ;make not zero
                 push dword 8388607 ;24 bit depth
@@ -1342,7 +1346,7 @@ fileNotFound: ;error message
         
     push NULL 
     call _ExitProcess@4
-      
+    
 loadLibraries:
     pop dword [stamk]
     
@@ -1421,7 +1425,6 @@ postResults:
         
 FPUfunc1:
     pop dword [hold_value] ;saves the pointer thingy
-    
     pop dword [uab] ;Un-Altered Block 
     pop dword [block_size] ;# of block elements to be averaged
     pop dword [depth]
@@ -1447,7 +1450,6 @@ FPUfunc1:
     fdiv st1
     fstp dword [div_result]
     
-    
     ;Log2 10
     fld dword [ONE]  
     fld dword [BASE]    
@@ -1463,14 +1465,15 @@ FPUfunc1:
     fld dword [TWENTY]
     fmul st1
     
+    
     fstp dword [log_result]
+    
     
 ;    PRINT_HEX 4, [log_result]
 ;    NEWLINE
     
     mov eax, [log_result] ;return value
     
-
     push dword [hold_value]
     ret
     
@@ -1483,15 +1486,14 @@ FPUfunc2:
     
     finit
     
+    
     fld dword [to_be_added]
     fld dword [addition_heap]
     fadd 
     
     fstp dword [addition_heap]
 
-    
     mov eax, [addition_heap]
-    
     
     push dword [hold_value6]
     ret
@@ -1504,42 +1506,87 @@ FPUfunc3:
     pop dword [preAvg2] ;last block
     
     pop dword [depth]
-    
+   
     ; Average whole
     finit
     
     ;weighted average ( (x*y + a*b) / (x + a) )
-    fld dword [preAvg]
+    
+    ;new system to prevent overflow:
+    ;   
+    ;   A = a / blockCount
+    ;   q = remainderBlock / blockCount * BLOCK_SIZE
+    ;   z = 1 - q
+    ;   
+    ;example: 4 main blocks of 3, 30 each, remainder block of 2 x 10
+    ;   10, 10, 10, 10,   10, 10, 10, 10,   10, 10, 10, 10,   10, 10, 10, 10,   10, 10, -, -,
+    ;   
+    ;   (z*A + q*b) = avg
+    ;   ( (0.83*10 + 0.17*10) )
+    ;   
+    ; 
+    ;
+    ;
+    ;
+    ;
+    ;
+    ;
+    
+    fld dword [preAvg] ;/
+    fild dword [blockCount] ;*
+    fdiv ;A
+    
+;    PRINT_STRING 'A '
+;    fst dword [bruh]
+;    PRINT_HEX 4, [bruh]
+;    NEWLINE
+    
+    fld dword [ONE]
+    fild dword [remainderBlock] ;/
+    fild dword [blockCount] ;*
     fild dword [depth]
-    fild dword [blockCount]
     fmul
-    fmul
-    fild dword [remainderBlock]
+    fdiv ;q
+    fst dword [calc]
+    
+;    PRINT_STRING 'q '
+;    fst dword [bruh]
+;    PRINT_HEX 4, [bruh]
+;    NEWLINE
+    
+    fsub ;1-q
+    
+;    PRINT_STRING 'z '
+;    fst dword [bruh]
+;    PRINT_HEX 4, [bruh]
+;    NEWLINE
+    
+    fmul ;A * z
+    
+    fld dword [calc] ;*
     fld dword [preAvg2]
-    fmul
-    fadd
-    fstp dword [numerator]
+    fmul ;q*b
     
-    fild dword [blockCount]
-    fild dword [depth]
-    fmul
-    fild dword [remainderBlock]
-    fadd
-    fstp dword [denominator]
+;    PRINT_STRING 'b '
+;    PRINT_HEX 4, [preAvg2]
+;    NEWLINE 
     
-    fld dword [numerator] ;/
-    fld dword [denominator]
-    fdiv
+;    PRINT_STRING 'q*b '
+;    fst dword [bruh]
+;    PRINT_HEX 4, [bruh]
+;    NEWLINE  
+     
+    fadd
     
     fstp dword [final_result]
     
     mov eax, [final_result]
     
-    
     push dword [hold_value]
     ret
     
 DFT_16:
+    
     pop dword [stamk]
     ;will get all on mono, every other on stereo, naturally
     .preCalc:
@@ -1601,6 +1648,12 @@ DFT_16:
     div ecx
     
     mov [blockAmt], eax
+    
+    PRINT_STRING "DFT BLOCKS AMT: "
+    PRINT_DEC 4, [blockAmt]
+    NEWLINE
+    mov [blockCount], eax
+    
     mov [remainderBlock], edx
    
     
@@ -1610,12 +1663,13 @@ DFT_16:
     mov edx, [lookUpPtr]
     mov esi, 0
     
-
     .blocks:
         PRINT_STRING 'blocks started! (DFT)'
         NEWLINE
         .dftBlock:
-      
+            
+            ;PRINT_STRING 'b'
+            ;NEWLINE
             mov dword [Re], 0
             mov dword [Im], 0
             mov ebx, 0
@@ -1625,6 +1679,7 @@ DFT_16:
             mov edx, [lookUpPtr]
             finit
             .dftMath:
+                fld dword [Im]
                 
                 ;real 
                 fld dword [edx+ecx*4]
@@ -1640,12 +1695,12 @@ DFT_16:
                 fld dword [edx+ecx*4]
                 fild word [eax+esi*2]
                 fmul
-                fstp dword [hold_calc]
+                ;fstp dword [hold_calc]
                 
                 sub ecx, (DFT_SIZE * 200) + 2
                 
-                fld dword [Im]
-                fld dword [hold_calc]
+                ;fld dword [Im]                     (up top)<<<
+                ;fld dword [hold_calc]
                 fsub
                 fstp dword [Im]      
                 
@@ -1654,8 +1709,10 @@ DFT_16:
                 inc esi
                 cmp ebx, DFT_SIZE
                 jl .dftMath
-                mov [LU], ecx                         ;<    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-                
+                mov [LU], ecx  
+                                       ;<    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+            ;PRINT_DEC 4, [offset]
+            ;NEWLINE    
             pop ecx  
             mov ebx, [Re]
             mov [realResult+ecx*4], ebx
@@ -1667,10 +1724,15 @@ DFT_16:
             inc dword [iter]
             cmp dword [iter], 200
             jl .dftBlock
-           
+            
         .finishDFT:
             mov dword [N], DFT_SIZE
             mov ecx, 0
+            
+            PRINT_STRING '============= '
+            PRINT_DEC 4, [blockCount]
+            NEWLINE
+            
             .dftLoop:
                 ; sqrt(Im^2 + Re^2)
                 finit 
@@ -1684,39 +1746,265 @@ DFT_16:
                 fsqrt
                 fild dword [N]
                 fdiv
+                
+;                fist dword [bruh]
+;                PRINT_DEC 4, [bruh]
+;                NEWLINE
+                
                 fld dword [dftResult+ecx*4]
                 fadd
                 fstp dword [dftResult+ecx*4]
                
                 
+                
                 inc ecx
                 cmp ecx, 200 / 2
                 jl .dftLoop
-    
+;# # # TESTING ZONE # # # # # # # # # # # # # # # # # # # # # # # # #
+;the goal of this area is to print the averages of each band for each dft block to help analyze what is going wrong.
+        
+        finit 
+        fld dword [dftResult+0*4];/      
+        fld dword [TEN]
+        fmul
+        fistp dword [subBand]
+        
+        MOV DWORD [dftResult+0*4], 0
+        
+        ;2 and 3
+        mov dword [N], 2
+        finit
+        fld dword [dftResult+1*4]
+        
+        MOV DWORD [dftResult+1*4], 0
+        
+        fstp dword [bassBand]
+        
+        mov ecx, 2
+        .TESTband2:                                                     ;TEST ZONE
+            finit
+            fld dword [bassBand]
+            fld dword [dftResult+ecx*4]
+            fadd
+            fstp dword [bassBand]
+            
+            MOV DWORD [dftResult+ecx*4], 0
+            
+            inc ecx
+            cmp ecx, 2
+            jle .TESTband2  
+        
+        finit
+        fld dword [bassBand]
+        
+        
+        fild dword [N]
+        fdiv
+        fld dword [TEN]
+        fmul
+        fistp dword [bassBand]
+        
+        ;4 through 15
+        mov dword [N], 12
+        finit
+        fld dword [dftResult+4*4]
+        
+        MOV DWORD [dftResult+4*4], 0
+            
+        fstp dword [midBand]
+        mov ecx, 5
+        .TESTband3:                                                         ;TEST ZONE
+            finit
+            fld dword [midBand]
+            fld dword [dftResult+ecx*4]
+            fadd
+            fstp dword [midBand]
+            
+            MOV DWORD [dftResult+ecx*4], 0
+            
+            inc ecx
+            cmp ecx, 14
+            jle .TESTband3  
+            
+        finit
+        fld dword [midBand]
+        
+        
+        fild dword [N]
+        fdiv
+        fld dword [TEN]
+        fmul
+        fistp dword [midBand]
+        
+        ;16 through 32 
+        mov dword [N], 17
+        finit
+        fld dword [dftResult+15*4]
+        
+        MOV DWORD [dftResult+15*4], 0
+            
+        fstp dword [highBand]
+        mov ecx, 16
+        .TESTband4:                                                 ;TEST ZONE
+            finit
+            fld dword [highBand]
+            fld dword [dftResult+ecx*4]
+            fadd
+            fstp dword [highBand]
+            
+            MOV DWORD [dftResult+ecx*4], 0
+            
+            inc ecx
+            cmp ecx, 31
+            jle .TESTband4  
+            
+        finit
+        fld dword [highBand]
+        
+
+        
+        fild dword [N]
+        fdiv
+        fld dword [TEN]
+        fmul
+        fistp dword [highBand]
+        
+        ;33 through 96
+        mov dword [N], 64
+        finit
+        fld dword [dftResult+32*4]
+
+        MOV DWORD [dftResult+32*4], 0
+            
+        fstp dword [vhBand]
+        mov ecx, 33
+        .TESTband5:                                                     ;TEST ZONE
+            finit
+            fld dword [vhBand]
+            fld dword [dftResult+ecx*4]
+            fadd
+            fstp dword [vhBand]
+            
+            MOV DWORD [dftResult+ecx*4], 0
+            
+            inc ecx
+            cmp ecx, 95
+            jle .TESTband5 
+            
+        finit
+        fld dword [vhBand]
+        
+        
+        fild dword [N]
+        fdiv
+        fld dword [TEN]
+        fmul
+        fistp dword [vhBand]
+        
+        PRINT_STRING 'SU '
+        PRINT_DEC 4, [subBand]
+        NEWLINE
+        PRINT_STRING 'BA '
+        PRINT_DEC 4, [bassBand]
+        NEWLINE
+        PRINT_STRING 'MI '
+        PRINT_DEC 4, [midBand]
+        NEWLINE
+        PRINT_STRING 'HI '
+        PRINT_DEC 4, [highBand]
+        NEWLINE
+        PRINT_STRING 'VH '
+        PRINT_DEC 4, [vhBand]
+        NEWLINE
+
+;# # # END TESTING ZONE # # # # # # # # # # # # # # # # # # # # # # #
+
+
+                
     add dword [offset], DFT_SIZE
     mov ecx, 0
     mov dword [LU], 0
-    pop ebx
-    dec ebx
-    jnz .dftBlock
-               
+    
+        
+    ;pop ebx
+    dec dword [blockCount]
+    
+    cmp dword [blockCount], 0
+    jg .dftBlock
+    
+    PRINT_STRING '---------'
+    NEWLINE
+    finit
+    push ecx
+    mov ecx, 0
+    .debug_loop:
+        fld dword [dftResult+ecx*4]
+        fistp dword [bruh]
+        PRINT_DEC 4, [bruh]
+        NEWLINE
+        inc ecx
+        cmp ecx, 200 / 2
+        jl .debug_loop
+    pop ecx
+    
+    PRINT_STRING 'amt '
+    PRINT_DEC 4, [blockAmt]
+    NEWLINE            
     .formatDFT:
-        
-        mov dword [N], 2
-        finit 
+
         ;1
+        finit 
         fld dword [dftResult+0*4];/
-        fild dword [blockAmt]
-        fdiv
-        fistp dword [lowBand]
+
+        PRINT_STRING 'subband before getting averaged: '
+        PRINT_HEX 4, [dftResult+0*4]
+        NEWLINE
         
-        mov dword [N], 10
-        ;2 through 11
+;        fild dword [blockAmt]
+;        fdiv
+        fld dword [TEN]
+        fmul
+        fistp dword [subBand]
+        
+        ;2 and 3
+        mov dword [N], 2
         finit
         fld dword [dftResult+1*4]
-        fstp dword [midBand]
+        fstp dword [bassBand]
         mov ecx, 2
         .band2:
+            finit
+            fld dword [bassBand]
+            fld dword [dftResult+ecx*4]
+            fadd
+            fstp dword [bassBand]
+            
+            inc ecx
+            cmp ecx, 2
+            jle .band2  
+        
+        finit
+        fld dword [bassBand]
+        
+        PRINT_STRING 'bassband before getting averaged: '
+        PRINT_HEX 4, [bassBand]
+        NEWLINE
+        
+        fild dword [N]
+        fdiv
+;        fild dword [blockAmt]
+;        fdiv
+        fld dword [TEN]
+        fmul
+        fistp dword [bassBand]
+        
+        ;4 through 15
+        mov dword [N], 12
+        finit
+        fld dword [dftResult+3*4]
+        fstp dword [midBand]
+        mov ecx, 4
+        .band3:
             finit
             fld dword [midBand]
             fld dword [dftResult+ecx*4]
@@ -1724,24 +2012,31 @@ DFT_16:
             fstp dword [midBand]
             
             inc ecx
-            cmp ecx, 10
-            jle .band2  
-          
+            cmp ecx, 14
+            jle .band3  
+            
         finit
         fld dword [midBand]
+        
+        PRINT_STRING 'midband before getting averaged: '
+        PRINT_HEX 4, [midBand]
+        NEWLINE
+        
         fild dword [N]
         fdiv
-        fild dword [blockAmt]
-        fdiv
+;        fild dword [blockAmt]
+;        fdiv
+        fld dword [TEN]
+        fmul
         fistp dword [midBand]
         
-        ;12 through 96
-        mov dword [N], 85
+        ;16 through 32 
+        mov dword [N], 17
         finit
-        fld dword [dftResult+11*4]
+        fld dword [dftResult+15*4]
         fstp dword [highBand]
-        mov ecx, 12
-        .band3:
+        mov ecx, 16
+        .band4:
             finit
             fld dword [highBand]
             fld dword [dftResult+ecx*4]
@@ -1749,42 +2044,106 @@ DFT_16:
             fstp dword [highBand]
             
             inc ecx
-            cmp ecx, 95
-            jle .band3  
+            cmp ecx, 31
+            jle .band4  
             
         finit
         fld dword [highBand]
+        
+        PRINT_STRING 'highband before getting averaged: '
+        PRINT_HEX 4, [highBand]
+        NEWLINE
+        
         fild dword [N]
         fdiv
-        fild dword [blockAmt]
-        fdiv
+;        fild dword [blockAmt]
+;        fdiv
+        fld dword [TEN]
+        fmul
         fistp dword [highBand]
         
+        ;33 through 96
+        mov dword [N], 64
+        finit
+        fld dword [dftResult+32*4]
+        fstp dword [vhBand]
+        mov ecx, 33
+        .band5:
+            finit
+            fld dword [vhBand]
+            fld dword [dftResult+ecx*4]
+            fadd
+            fstp dword [vhBand]
+            
+            inc ecx
+            cmp ecx, 95
+            jle .band5 
+            
+        finit
+        fld dword [vhBand]
+        
+        PRINT_STRING 'vhband before getting averaged: '
+        PRINT_HEX 4, [vhBand]
+        NEWLINE
+        
+        fild dword [N]
+        fdiv
+;       fild dword [blockAmt]
+;       fdiv
+        fld dword [TEN]
+        fmul
+        fistp dword [vhBand]
+        
         push dword [stamk]
+
         ret
 
+
+
+
+
+
 DFT_24:
+
+
+
+
+
+
+
 
 Print_FT:
     pop dword [stamk]
     PRINT_STRING "Frequency Bands:"
     NEWLINE
     
-    PRINT_DEC 4, [lowBand]
+    PRINT_STRING "SKIPPING POSTING FT BECAUSE OF TEST"
+    NEWLINE
+    jmp .skip
+    
+    PRINT_DEC 4, [subBand]
+    NEWLINE
+    PRINT_DEC 4, [bassBand]
     NEWLINE
     PRINT_DEC 4, [midBand]
     NEWLINE
     PRINT_DEC 4, [highBand]
     NEWLINE
+    PRINT_DEC 4, [vhBand]
+    NEWLINE
     
-    mov eax, [lowBand]
+    mov eax, [subBand]
     mov dword [painAndSuffering+0*4], eax
-    mov eax, [midBand]
+    mov eax, [bassBand]
     mov dword [painAndSuffering+1*4], eax
-    mov eax, [highBand]
+    mov eax, [midBand]
     mov dword [painAndSuffering+2*4], eax
+    mov eax, [highBand]
+    mov dword [painAndSuffering+3*4], eax
+    mov eax, [vhBand]
+    mov dword [painAndSuffering+4*4], eax
     
-    mov ecx, 2 ;# of bands -1
+    mov ecx, 4 ;# of bands -1
     mov eax, 0
     .lop:
         cmp dword [painAndSuffering+ecx*4], eax
@@ -1801,6 +2160,7 @@ Print_FT:
     
     mov [greatest], eax
     mov ecx, 0
+    
     PRINT_STRING "chopped:"
     NEWLINE
     .lop2:
@@ -1813,9 +2173,7 @@ Print_FT:
         fdiv
         fistp dword [calc]
         
-        PRINT_STRING [band_label]
-        NEWLINE
-        PRINT_CHAR [band_label+ecx]
+        PRINT_STRING [band_label+ecx*3]
         PRINT_STRING " "
         mov ebx, [calc]
         .lop3:
@@ -1826,10 +2184,11 @@ Print_FT:
             NEWLINE
             
         inc ecx
-        cmp ecx, 3
+        cmp ecx, 5
         jl .lop2
-        
-              
+    
+    .skip:
+                
     push dword [stamk]
     ret
     
