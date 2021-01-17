@@ -21,6 +21,10 @@ extern _free
 ; 6. Develop Linux ver.
 
 ;; Swap 'blockAmt' and 'blockCount'
+
+;for 24 bit DFT, simply mark sub band as "not available".
+
+;add windowing to dft    
             
 section .data
     %define OPEN_EXISTING 3
@@ -61,6 +65,9 @@ section .data
     HUNDRED dd 100.0
     FIVE dd 5.0
     TWO_POINT_FIVE dd 2.5
+    ERR_COR_24 dd 0.004
+    DEPTH_24 dd 8388608
+    THOUSAND dd 1000.0
     formatM db "%.1f dB-FS", 10, 0
     formatS db "%.1f", 0
     formatL db "L %.1f dB-FS", 10, 0
@@ -472,6 +479,7 @@ mono16:
         mov word dx, [edx+ecx*2]
         and edx, 0x0000FFFF
         
+        
         bt dx, 15
         jc makePos16m
         retMakePos16m:
@@ -528,7 +536,7 @@ mono16:
             mov edx, [readBuffer]
             mov word dx, [edx+ecx*2]
             and edx, 0x0000FFFF
-        
+            
             bt dx, 15
             jc makePos16m2
             retMakePos16m2:
@@ -831,9 +839,7 @@ mono24:
     
     jmp loop24m
     retLoop24m:
-    
-    PRINT_STRING "Left loop"
-    NEWLINE
+   
     
     push dword 1 ;number of channels
     push dword [final_result]
@@ -846,7 +852,7 @@ mono24:
         
         mov edx, [readBuffer]
         mov edx, [edx+ecx]
-        and edx, CUT_TOP_8
+        and edx, CUT_TOP_8       
         
         bt edx, 23
         jc makePos24m
@@ -954,6 +960,7 @@ mono24:
                 jmp retMakePos24m2
                 
         makePos24m:
+ 
             not edx
             inc edx
             and edx, CUT_TOP_8
@@ -1017,7 +1024,9 @@ stereo24:
         
         mov edx, [readBuffer]
         mov edx, [edx+ecx]
-        and edx, CUT_TOP_8
+        ;and edx, CUT_TOP_8
+        
+        shr edx, 8
         
         bt edx, 23
         jc makePos24s
@@ -1505,6 +1514,10 @@ DFT_16:
    
     mov [blockCount], eax
     
+    PRINT_STRING "bc "
+    PRINT_DEC 4, [blockCount]
+    NEWLINE
+    
     mov edx, 0
     ;eax good
     mov ecx, 40
@@ -1528,8 +1541,7 @@ DFT_16:
     .blocks:
         
         .dftBlock:
-            
-            
+
             mov dword [Re], 0
             mov dword [Im], 0
             mov ebx, 0
@@ -1546,8 +1558,29 @@ DFT_16:
                 fld dword [edx+ecx*4]
                 fild word [eax+esi*2]
                 fmul
+                
+                
+                ;RECTANGULAR WINDOW
+                cmp ebx, 256
+                jle .firstWindow
+                jmp .retFirstWindow
+                .firstWindow:
+                    fldz
+                    fmul
+                
+                .retFirstWindow:
+                cmp ebx, DFT_SIZE - 256
+                jge .lastWindow
+                jmp .retLastWindow
+                .lastWindow:
+                    fldz
+                    fmul
+                    
+                .retLastWindow:
+                
                 fld dword [Re]
                 fadd
+ 
                 fstp dword [Re]
                 
                 ;imaginary
@@ -1559,6 +1592,24 @@ DFT_16:
                 
                 sub ecx, (DFT_SIZE * 200) + 2
                 
+                ;RECTANGULAR WINDOW 2
+                cmp ebx, 256
+                jle .firstWindow2
+                jmp .retFirstWindow2
+                .firstWindow2:
+                    fldz
+                    fmul
+                
+                .retFirstWindow2:
+                cmp ebx, DFT_SIZE - 256
+                jge .lastWindow2
+                jmp .retLastWindow2
+                .lastWindow2:
+                    fldz
+                    fmul
+                    
+                .retLastWindow2:
+               
                 fsub
                 fstp dword [Im]      
                 
@@ -1589,7 +1640,7 @@ DFT_16:
             jl .dftBlock
             
         .finishDFT:
-            mov dword [N], DFT_SIZE
+            mov dword [N], DFT_SIZE * 200
             mov ecx, 0
             
             .dftLoop:
@@ -1606,10 +1657,11 @@ DFT_16:
                 fild dword [N]
                 fdiv
                 
+                
                 fld dword [dftResult+ecx*4]
                 fadd
                 fstp dword [dftResult+ecx*4]
-               
+                
                 inc ecx
                 cmp ecx, 200 / 2
                 jl .dftLoop
@@ -1618,7 +1670,7 @@ DFT_16:
     add dword [offset], DFT_SIZE
     mov ecx, 0
     mov dword [LU], 0
-          
+            
     inc dword [statusCount]
     push ebx
     mov ebx, [statusbarDepth]
@@ -1666,8 +1718,8 @@ DFT_16:
         fmul
         fistp dword [bassBand]
         
-        ;3 through 15
-        mov dword [N], 13
+        ;3 through 11
+        mov dword [N], 9
         finit
         fld dword [dftResult+3*4]
         fstp dword [midBand]
@@ -1680,7 +1732,7 @@ DFT_16:
             fstp dword [midBand]
             
             inc ecx
-            cmp ecx, 14
+            cmp ecx, 10
             jle .band3  
             
         finit
@@ -1692,12 +1744,12 @@ DFT_16:
         fmul
         fistp dword [midBand]
         
-        ;16 through 32 
-        mov dword [N], 17
+        ;12 through 32 
+        mov dword [N], 21
         finit
         fld dword [dftResult+15*4]
         fstp dword [highBand]
-        mov ecx, 16
+        mov ecx, 12
         .band4:
             finit
             fld dword [highBand]
@@ -1765,8 +1817,8 @@ DFT_16:
         jmp .retFinishBar16
     
 DFT_24:
-    pop dword [stamk]
     
+    pop dword [stamk]
     .preCalc: 
         
         push dword (200 * DFT_SIZE * 2 * 4) + 4
@@ -1833,6 +1885,10 @@ DFT_24:
    
     mov [blockCount], eax
     
+    PRINT_STRING "bc "
+    PRINT_DEC 4, [blockCount]
+    NEWLINE
+    
     mov edx, 0
     ;eax good
     mov ecx, 40
@@ -1856,8 +1912,7 @@ DFT_24:
     .blocks:
         
         .dftBlock:
-            
-            
+
             mov dword [Re], 0
             mov dword [Im], 0
             mov ebx, 0
@@ -1871,15 +1926,38 @@ DFT_24:
                 fld dword [Im]
                 
                 ;real 
-                fld dword [edx+ecx*4]
                 
+                fld dword [edx+ecx*4]
                 mov edi, [eax+esi]
                 and edi, CUT_TOP_8
-                mov [temp], edi
-                fild dword [temp]
+                push edi
+                fild dword [esp]
                 fmul
+                
+                add esp, 4
+                
+                
+                ;RECTANGULAR WINDOW
+                cmp ebx, 256
+                jle .firstWindow
+                jmp .retFirstWindow
+                .firstWindow:
+                    fldz
+                    fmul
+                
+                .retFirstWindow:
+                cmp ebx, DFT_SIZE - 256
+                jge .lastWindow
+                jmp .retLastWindow
+                .lastWindow:
+                    fldz
+                    fmul
+                    
+                .retLastWindow:
+                
                 fld dword [Re]
                 fadd
+ 
                 fstp dword [Re]
                 
                 ;imaginary
@@ -1888,12 +1966,32 @@ DFT_24:
                 fld dword [edx+ecx*4]
                 mov edi, [eax+esi]
                 and edi, CUT_TOP_8
-                mov [temp], edi
-                fild dword [temp]
+                push edi
+                fild dword [esp]
                 fmul
+                
+                add esp, 4
                 
                 sub ecx, (DFT_SIZE * 200) + 2
                 
+                ;RECTANGULAR WINDOW 2
+                cmp ebx, 256
+                jle .firstWindow2
+                jmp .retFirstWindow2
+                .firstWindow2:
+                    fldz
+                    fmul
+                
+                .retFirstWindow2:
+                cmp ebx, DFT_SIZE - 256
+                jge .lastWindow2
+                jmp .retLastWindow2
+                .lastWindow2:
+                    fldz
+                    fmul
+                    
+                .retLastWindow2:
+               
                 fsub
                 fstp dword [Im]      
                 
@@ -1924,7 +2022,7 @@ DFT_24:
             jl .dftBlock
             
         .finishDFT:
-            mov dword [N], DFT_SIZE
+            mov dword [N], DFT_SIZE * 200
             mov ecx, 0
             
             .dftLoop:
@@ -1941,10 +2039,11 @@ DFT_24:
                 fild dword [N]
                 fdiv
                 
+                
                 fld dword [dftResult+ecx*4]
                 fadd
                 fstp dword [dftResult+ecx*4]
-               
+                
                 inc ecx
                 cmp ecx, 200 / 2
                 jl .dftLoop
@@ -1953,7 +2052,7 @@ DFT_24:
     add dword [offset], DFT_SIZE
     mov ecx, 0
     mov dword [LU], 0
-          
+            
     inc dword [statusCount]
     push ebx
     mov ebx, [statusbarDepth]
@@ -1967,6 +2066,20 @@ DFT_24:
     cmp dword [blockCount], 0
     jg .dftBlock
     
+;    PRINT_STRING '---------'
+;    NEWLINE
+;    finit
+;    push ecx
+;    mov ecx, 0
+;    .debug_loop:
+;        fld dword [dftResult+ecx*4]
+;        fistp dword [bruh]
+;        PRINT_DEC 4, [bruh]
+;        NEWLINE
+;        inc ecx
+;        cmp ecx, 200 / 2
+;        jl .debug_loop
+;    pop ecx
              
     .formatDFT:
         
@@ -1974,8 +2087,8 @@ DFT_24:
         finit 
         fld dword [dftResult+0*4]
         
-        ;fld dword [TEN]
-        ;fmul
+        fld dword [TEN]
+        fmul
         fistp dword [subBand]
         
         ;2
@@ -1983,12 +2096,12 @@ DFT_24:
         fld dword [dftResult+1*4]
 
         
-        ;fld dword [TEN]
-        ;fmul
+        fld dword [TEN]
+        fmul
         fistp dword [bassBand]
         
-        ;3 through 15
-        mov dword [N], 13
+        ;3 through 11
+        mov dword [N], 9
         finit
         fld dword [dftResult+3*4]
         fstp dword [midBand]
@@ -2001,7 +2114,7 @@ DFT_24:
             fstp dword [midBand]
             
             inc ecx
-            cmp ecx, 14
+            cmp ecx, 10
             jle .band3  
             
         finit
@@ -2009,16 +2122,16 @@ DFT_24:
         
         fild dword [N]
         fdiv
-        ;fld dword [TEN]
-        ;fmul
+        fld dword [TEN]
+        fmul
         fistp dword [midBand]
         
-        ;16 through 32 
-        mov dword [N], 17
+        ;12 through 32 
+        mov dword [N], 21
         finit
         fld dword [dftResult+15*4]
         fstp dword [highBand]
-        mov ecx, 16
+        mov ecx, 12
         .band4:
             finit
             fld dword [highBand]
@@ -2035,8 +2148,8 @@ DFT_24:
         
         fild dword [N]
         fdiv
-        ;fld dword [TEN]
-        ;fmul
+        fld dword [TEN]
+        fmul
         fistp dword [highBand]
         
         ;33 through 96
@@ -2061,8 +2174,8 @@ DFT_24:
         
         fild dword [N]
         fdiv
-        ;fld dword [TEN]
-        ;fmul
+        fld dword [TEN]
+        fmul
         fistp dword [vhBand]
         
         ;wraps up status bar:
@@ -2070,6 +2183,7 @@ DFT_24:
         jl .finishBar24
         .retFinishBar24:
         
+        mov edi, 24
         push dword [stamk]
         
         ret
@@ -2095,6 +2209,12 @@ Print_FT:
     PRINT_DEC 4, [subBand]
     NEWLINE
     or dword [subBand], 0x00000001
+    cmp edi, 24
+    jne .skipFix
+    mov dword [subBand], 1
+    
+    .skipFix:
+    
     PRINT_DEC 4, [bassBand]
     NEWLINE
     or dword [bassBand], 0x00000001
@@ -2107,6 +2227,7 @@ Print_FT:
     PRINT_DEC 4, [vhBand]
     NEWLINE
     or dword [vhBand], 0x00000001
+    
     
     mov eax, [subBand]
     mov dword [painAndSuffering+0*4], eax
@@ -2154,6 +2275,15 @@ Print_FT:
         PRINT_STRING [band_label+ecx*3]
         PRINT_STRING " "
         mov ebx, [calc]
+        
+        cmp edi, 24
+        jne .lop3
+        
+        cmp ecx, 0
+        jne .lop3
+        PRINT_STRING "[Band Not Available]"
+        NEWLINE
+        jmp .skip
         .lop3:
             PRINT_STRING "|"
             dec ebx
@@ -2161,7 +2291,8 @@ Print_FT:
             cmp ebx, 0
             jg .lop3
             NEWLINE
-            
+        
+        .skip:   
         inc ecx
         cmp ecx, 5
         jl .lop2
