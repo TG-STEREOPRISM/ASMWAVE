@@ -9,3 +9,4 @@ Please Note: 1) Only 24bit and 16bit stereo and mono can be used.
 3) The simple DFT algorithm is used, the FFT was too big brain to implement; so
 it takes a slight bit of time to run through. 
 4) Due to the #3, only the left channel frequencies are analyzed, to save time. 5) THE FREQENCY RESULTS MAY BE WRONG SOMETIMES, idk.
+6) The progress bar might be a bit f u n k y for smaller files.
