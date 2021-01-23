@@ -1,3 +1,7 @@
+; WELCOME TO ASMWAVE.
+
+
+
 %include "io.inc"
 extern _ExitProcess@4 
 extern _ReadFile@20
@@ -173,7 +177,8 @@ section .text
 _main:
 
     PRINT_STRING "Welcome to ASMWAVE  -  A conceptual x86 audio program."
-    TIMES 2 NEWLINE
+    NEWLINE
+    NEWLINE
     
     call loadLibraries
         
@@ -210,7 +215,7 @@ getFilePath:            ;Displays open file menu
     
     call [GetOpenFileNameA]
     PRINT_STRING selected_file
-    TIMES 2 NEWLINE     
+    NEWLINE     
     
     ; OPEN FILE HANDLE
     push NULL
@@ -1522,7 +1527,7 @@ DFT_16:             ;Discreet Fourier Transform, 16bit
         PRINT_STRING [statusChar]
         NEWLINE
         jmp .retFinishBar16
-
+        
     
             
 DFT_24:             ;Discreet Fourier Transform, 24bit
@@ -1930,7 +1935,8 @@ Print_FT:           ;Displays frequency results in graph form
     mov ecx, 0
     
     PRINT_STRING "=========================================="
-    TIMES 2 NEWLINE
+    NEWLINE
+    NEWLINE
     PRINT_STRING "Frequency comparison:"
     NEWLINE
     .lop2:
