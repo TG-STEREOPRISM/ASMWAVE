@@ -1,0 +1,5 @@
+To run ASMWAVE on Linux, 
+
+1) cd into the directory where "ASMWAVE" is located.
+2) enter "./ASMWAVE"
+3) have fun!
